@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -18,12 +19,17 @@ type regenerateImagePromptProvider interface {
 }
 
 type regenerateImageProvider interface {
-	GenerateImage(ctx context.Context, prompt string) ([]byte, error)
+	GenerateImage(ctx context.Context, prompt string, model string) ([]byte, error)
+}
+
+type regenerateImageChatProvider interface {
+	Get(ctx context.Context, chatID int64, topicID int) (*domain.Chat, error)
 }
 
 func RegenerateImage(
 	promptProvider regenerateImagePromptProvider,
 	imageProvider regenerateImageProvider,
+	chatProvider regenerateImageChatProvider,
 ) bot.HandlerFunc {
 	const moreButtonText = "Еще"
 
@@ -71,7 +77,22 @@ func RegenerateImage(
 
 		slog.InfoContext(ctx, "Prompt fetched", "prompt", prompt)
 
-		imageData, err := imageProvider.GenerateImage(ctx, prompt.Text)
+		model := ""
+		chat, err := chatProvider.Get(ctx, chatID, topicID)
+		if err != nil && !errors.Is(err, domain.ErrNotFound) {
+			b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID:          update.Message.Chat.ID,
+				MessageThreadID: update.Message.MessageThreadID,
+				Text:            fmt.Sprintf("❌ Не удалось получить чат: %s", err),
+			})
+			return
+		}
+
+		if chat != nil {
+			model = chat.ImageModel
+		}
+
+		imageData, err := imageProvider.GenerateImage(ctx, prompt.Text, model)
 		if err != nil {
 			b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID:          chatID,
@@ -81,7 +102,7 @@ func RegenerateImage(
 			return
 		}
 
-		slog.InfoContext(ctx, "Image generated", "size", len(imageData))
+		slog.InfoContext(ctx, "Image generated", "size", len(imageData), "model", model)
 
 		kb := &models.InlineKeyboardMarkup{
 			InlineKeyboard: [][]models.InlineKeyboardButton{

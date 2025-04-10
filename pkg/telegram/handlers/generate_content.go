@@ -30,7 +30,7 @@ type generateContentChatProvider interface {
 }
 
 type generateContentAIService interface {
-	GenerateImage(ctx context.Context, prompt string) ([]byte, error)
+	GenerateImage(ctx context.Context, prompt string, model string) ([]byte, error)
 	CreateChatCompletion(ctx context.Context, chat *domain.Chat) (*domain.Message, error)
 }
 
@@ -151,7 +151,22 @@ func GenerateContent(
 
 			slog.InfoContext(ctx, "Prompt saved", "prompt", prompt)
 
-			imageData, err := aiService.GenerateImage(ctx, prompt.Text)
+			chat, err := chatProvider.Get(ctx, chatID, topicID)
+			if err != nil && !errors.Is(err, domain.ErrNotFound) {
+				b.SendMessage(ctx, &bot.SendMessageParams{
+					ChatID:          chatID,
+					MessageThreadID: topicID,
+					Text:            fmt.Sprintf("❌ Не удалось получить чат: %s", err),
+				})
+				return
+			}
+
+			model := ""
+			if chat != nil {
+				model = chat.ImageModel
+			}
+
+			imageData, err := aiService.GenerateImage(ctx, prompt.Text, model)
 			if err != nil {
 				b.SendMessage(ctx, &bot.SendMessageParams{
 					ChatID:          chatID,

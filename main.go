@@ -98,6 +98,11 @@ func setupServices(ctx context.Context) (services.Group, error) {
 		// "gpt-4-turbo",   // $10.00/$30.00
 	}
 
+	supportedImageModels := []string{
+		domain.DallE2Model, // DALL-E 2
+		domain.DallE3Model, // DALL-E 3
+	}
+
 	supportedTTLOptions := []time.Duration{
 		30 * time.Second,
 		15 * time.Minute,
@@ -119,14 +124,15 @@ func setupServices(ctx context.Context) (services.Group, error) {
 		bot.WithMessageTextHandler("/start", bot.MatchTypePrefix, handlers.Start()),
 		bot.WithMessageTextHandler("/new", bot.MatchTypePrefix, handlers.ClearChat(chatRepository)),
 		bot.WithMessageTextHandler("/text_models", bot.MatchTypePrefix, handlers.ShowTextModels(supportedTextModels)),
-		bot.WithMessageTextHandler("/image_models", bot.MatchTypePrefix, handlers.ShowImageModels()),
+		bot.WithMessageTextHandler("/image_models", bot.MatchTypePrefix, handlers.ShowImageModels(supportedImageModels)),
 		bot.WithMessageTextHandler("/system_prompt", bot.MatchTypePrefix, handlers.ShowSystemPrompt(chatRepository)),
 		bot.WithMessageTextHandler("/ttl", bot.MatchTypePrefix, handlers.ShowTTL(supportedTTLOptions)),
 
+		bot.WithCallbackQueryDataHandler(domain.SetImageModelCallbackPrefix, bot.MatchTypePrefix, handlers.SetImageModel(chatRepository, supportedImageModels)),
 		bot.WithCallbackQueryDataHandler(domain.SetTTLCallbackPrefix, bot.MatchTypePrefix, handlers.SetTTL(chatRepository, supportedTTLOptions)),
 		bot.WithCallbackQueryDataHandler(domain.SetTextModelCallbackPrefix, bot.MatchTypePrefix, handlers.SetTextModel(chatRepository, supportedTextModels)),
 		bot.WithCallbackQueryDataHandler(domain.SetSystemPromptCallbackPrefix, bot.MatchTypePrefix, handlers.RequestSystemPrompt(stateRepository)),
-		bot.WithCallbackQueryDataHandler(domain.GenImageCallbackPrefix, bot.MatchTypePrefix, handlers.RegenerateImage(promptRepository, openAIClient)),
+		bot.WithCallbackQueryDataHandler(domain.GenImageCallbackPrefix, bot.MatchTypePrefix, handlers.RegenerateImage(promptRepository, openAIClient, chatRepository)),
 	}
 
 	b, err := bot.New(cfg.TelegramBotToken, opts...)

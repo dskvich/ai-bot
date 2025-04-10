@@ -187,12 +187,25 @@ func createMultipartForm(filePath, model string) (*bytes.Buffer, string, error) 
 	return &body, writer.FormDataContentType(), nil
 }
 
-func (c *client) GenerateImage(ctx context.Context, prompt string) ([]byte, error) {
+func (c *client) GenerateImage(ctx context.Context, prompt string, model string) ([]byte, error) {
+	if model == "" {
+		model = domain.DallE2Model
+	}
+
+	size := domain.Size256x256
+	quality := domain.QualityStandard
+
+	if model == domain.DallE3Model {
+		size = domain.Size1024x1024
+		quality = domain.QualityHD
+	}
+
 	reqBody, err := json.Marshal(map[string]interface{}{
-		"model":           domain.DallE2Model,
+		"model":           model,
 		"prompt":          prompt,
 		"n":               1,
-		"size":            domain.Size256x256,
+		"size":            size,
+		"quality":         quality,
 		"response_format": defaultResponseFmt,
 	})
 	if err != nil {
