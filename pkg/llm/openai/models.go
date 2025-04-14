@@ -37,3 +37,20 @@ type chatMessageImageURL struct {
 }
 
 const chatMessageRoleDeveloper = "developer"
+
+type imageSize string
+
+const (
+	size256x256   imageSize = "256x256"
+	size512x512   imageSize = "512x512"
+	size1024x1024 imageSize = "1024x1024"
+	size1024x1792 imageSize = "1024x1792"
+	size1792x1024 imageSize = "1792x1024"
+)
+
+type imageQuality string
+
+const (
+	qualityStandard imageQuality = "standard"
+	qualityHD       imageQuality = "hd"
+)

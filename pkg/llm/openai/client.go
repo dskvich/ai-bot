@@ -192,12 +192,12 @@ func (c *client) GenerateImage(ctx context.Context, prompt string, model string)
 		model = domain.DallE2Model
 	}
 
-	size := domain.Size256x256
-	quality := domain.QualityStandard
+	size := size256x256
+	quality := qualityStandard
 
 	if model == domain.DallE3Model {
-		size = domain.Size1024x1024
-		quality = domain.QualityHD
+		size = size1024x1024
+		quality = qualityHD
 	}
 
 	reqBody, err := json.Marshal(map[string]interface{}{
@@ -238,4 +238,39 @@ func (c *client) GenerateImage(ctx context.Context, prompt string, model string)
 	}
 
 	return parsedResp.Data[0].B64Json, nil
+}
+
+func (c *client) GenerateImagePrompt(ctx context.Context, prompt string) (string, error) {
+	prompt = fmt.Sprintf("User described an image idea. Write a detailed English prompt for AI image generation: %s", prompt)
+
+	reqBody, err := json.Marshal(chatCompletionRequest{
+		Model:     domain.Gpt4oMiniModel,
+		Messages:  []chatCompletionMessage{{Role: "user", Content: prompt}},
+		MaxTokens: defaultMaxTokens,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURLChatCompletions, bytes.NewBuffer(reqBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	respBody, err := c.doRequest(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to send chat completion request: %w", err)
+	}
+
+	var parsedResp chatCompletionResponse
+	if err := json.Unmarshal(respBody, &parsedResp); err != nil {
+		return "", fmt.Errorf("failed to parse chat completion response: %w", err)
+	}
+
+	if len(parsedResp.Choices) == 0 {
+		return "", errors.New("no choices returned in response")
+	}
+
+	return fmt.Sprint(parsedResp.Choices[0].Message.Content), nil
 }

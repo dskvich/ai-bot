@@ -13,7 +13,9 @@ import (
 	"github.com/dskvich/ai-bot/pkg/converter"
 	"github.com/dskvich/ai-bot/pkg/database"
 	"github.com/dskvich/ai-bot/pkg/domain"
+	"github.com/dskvich/ai-bot/pkg/llm"
 	"github.com/dskvich/ai-bot/pkg/llm/openai"
+	"github.com/dskvich/ai-bot/pkg/llm/replicate"
 	"github.com/dskvich/ai-bot/pkg/logger"
 	"github.com/dskvich/ai-bot/pkg/repository"
 	"github.com/dskvich/ai-bot/pkg/services"
@@ -25,6 +27,7 @@ import (
 
 type Config struct {
 	OpenAIToken               string  `env:"OPEN_AI_TOKEN,required"`
+	ReplicateToken            string  `env:"REPLICATE_API_TOKEN,required"`
 	TelegramBotToken          string  `env:"TELEGRAM_BOT_TOKEN,required"`
 	TelegramAuthorizedUserIDs []int64 `env:"TELEGRAM_AUTHORIZED_USER_IDS" envSeparator:" "`
 	PgURL                     string  `env:"DATABASE_URL"`
@@ -84,6 +87,11 @@ func setupServices(ctx context.Context) (services.Group, error) {
 		return nil, fmt.Errorf("creating open ai client: %w", err)
 	}
 
+	replicateClient, err := replicate.NewClient(cfg.ReplicateToken)
+	if err != nil {
+		return nil, fmt.Errorf("creating replicate client: %w", err)
+	}
+
 	chatRepository := repository.NewChatRepository(db)
 	stateRepository := repository.NewStateRepository()
 	promptRepository := repository.NewPromptRepository(db)
@@ -99,9 +107,18 @@ func setupServices(ctx context.Context) (services.Group, error) {
 	}
 
 	supportedImageModels := []string{
-		domain.DallE2Model, // DALL-E 2
-		domain.DallE3Model, // DALL-E 3
+		domain.DallE2Model,    // DALL-E 2
+		domain.DallE3Model,    // DALL-E 3
+		domain.FluxProUltra11, // Flux 1.1 Pro Ultra
 	}
+
+	imageProviders := map[string]llm.ImageGenerator{
+		domain.DallE2Model:    openAIClient,
+		domain.DallE3Model:    openAIClient,
+		domain.FluxProUltra11: replicateClient,
+	}
+
+	imageClient := llm.NewMultiProviderImageClient(imageProviders)
 
 	supportedTTLOptions := []time.Duration{
 		30 * time.Second,
@@ -120,7 +137,7 @@ func setupServices(ctx context.Context) (services.Group, error) {
 			middleware.VoiceToText(&converter.VoiceToMP3{}, openAIClient),
 		),
 
-		bot.WithDefaultHandler(handlers.GenerateContent(chatRepository, promptRepository, openAIClient, &converter.VoiceToMP3{})),
+		bot.WithDefaultHandler(handlers.GenerateContent(chatRepository, promptRepository, openAIClient, imageClient, &converter.VoiceToMP3{})),
 		bot.WithMessageTextHandler("/start", bot.MatchTypePrefix, handlers.Start()),
 		bot.WithMessageTextHandler("/new", bot.MatchTypePrefix, handlers.ClearChat(chatRepository)),
 		bot.WithMessageTextHandler("/text_models", bot.MatchTypePrefix, handlers.ShowTextModels(supportedTextModels)),
@@ -132,7 +149,7 @@ func setupServices(ctx context.Context) (services.Group, error) {
 		bot.WithCallbackQueryDataHandler(domain.SetTTLCallbackPrefix, bot.MatchTypePrefix, handlers.SetTTL(chatRepository, supportedTTLOptions)),
 		bot.WithCallbackQueryDataHandler(domain.SetTextModelCallbackPrefix, bot.MatchTypePrefix, handlers.SetTextModel(chatRepository, supportedTextModels)),
 		bot.WithCallbackQueryDataHandler(domain.SetSystemPromptCallbackPrefix, bot.MatchTypePrefix, handlers.RequestSystemPrompt(stateRepository)),
-		bot.WithCallbackQueryDataHandler(domain.GenImageCallbackPrefix, bot.MatchTypePrefix, handlers.RegenerateImage(promptRepository, openAIClient, chatRepository)),
+		bot.WithCallbackQueryDataHandler(domain.GenImageCallbackPrefix, bot.MatchTypePrefix, handlers.RegenerateImage(promptRepository, imageClient, chatRepository)),
 	}
 
 	b, err := bot.New(cfg.TelegramBotToken, opts...)

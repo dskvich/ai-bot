@@ -22,6 +22,8 @@ func ShowImageModels(supportedImageModels []string) bot.HandlerFunc {
 				displayName = "DALL-E 2"
 			case domain.DallE3Model:
 				displayName = "DALL-E 3"
+			case domain.FluxProUltra11:
+				displayName = "Flux 1.1 Pro Ultra"
 			default:
 				displayName = model
 			}

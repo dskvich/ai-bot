@@ -83,6 +83,7 @@ jobs:
               --env DATABASE_URL=${{ vars.DATABASE_URL }} \
               --env TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }} \
               --env OPEN_AI_TOKEN=${{ secrets.OPEN_AI_TOKEN }} \
+              --env REPLICATE_API_TOKEN=${{ secrets.REPLICATE_API_TOKEN }} \
               --env TELEGRAM_AUTHORIZED_USER_IDS="${{ vars.TELEGRAM_AUTHORIZED_USER_IDS }}" \
               --network my-network \
               $IMAGE_TAG

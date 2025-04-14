@@ -30,8 +30,12 @@ type generateContentChatProvider interface {
 }
 
 type generateContentAIService interface {
-	GenerateImage(ctx context.Context, prompt string, model string) ([]byte, error)
+	GenerateImagePrompt(ctx context.Context, prompt string) (string, error)
 	CreateChatCompletion(ctx context.Context, chat *domain.Chat) (*domain.Message, error)
+}
+
+type generateContentImageProvider interface {
+	GenerateImage(ctx context.Context, prompt string, model string) ([]byte, error)
 }
 
 type generateContentPromptSaver interface {
@@ -46,6 +50,7 @@ func GenerateContent(
 	chatProvider generateContentChatProvider,
 	promptSaver generateContentPromptSaver,
 	aiService generateContentAIService,
+	imageProvider generateContentImageProvider,
 	audioConverter generateContentAudioConverter,
 ) bot.HandlerFunc {
 	const maxTelegramMessageLength = 4096
@@ -140,6 +145,18 @@ func GenerateContent(
 			strings.Contains(strings.ToLower(prompt.Text), "draw")
 
 		if isImagePrompt {
+			newPrompt, err := aiService.GenerateImagePrompt(ctx, prompt.Text)
+			if err != nil {
+				b.SendMessage(ctx, &bot.SendMessageParams{
+					ChatID:          chatID,
+					MessageThreadID: topicID,
+					Text:            fmt.Sprintf("❌ Не удалось сгенерировать промпт: %s", err),
+				})
+				return
+			}
+
+			prompt.Text = newPrompt
+
 			if err := promptSaver.Save(ctx, prompt); err != nil {
 				b.SendMessage(ctx, &bot.SendMessageParams{
 					ChatID:          chatID,
@@ -166,7 +183,7 @@ func GenerateContent(
 				model = chat.ImageModel
 			}
 
-			imageData, err := aiService.GenerateImage(ctx, prompt.Text, model)
+			imageData, err := imageProvider.GenerateImage(ctx, prompt.Text, model)
 			if err != nil {
 				b.SendMessage(ctx, &bot.SendMessageParams{
 					ChatID:          chatID,
